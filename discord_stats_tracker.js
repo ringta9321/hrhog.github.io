@@ -93,10 +93,10 @@ function getStatsMessage() {
 • Unique Users: ${stats.day.users.size}`;
 }
 
-async function startBot() {
+export async function startBot() {
   if (!DISCORD_TOKEN) {
     console.error('❌ DISCORD_TOKEN is not set!');
-    process.exit(1);
+    return;
   }
 
   const client = new Client({
@@ -111,11 +111,12 @@ async function startBot() {
     console.log(`✅ Bot logged in as ${client.user.tag}`);
     console.log(`📝 Monitoring channel: ${LOGS_CHANNEL_ID || 'Not set'}`);
     console.log(`📊 Stats output channel: ${STATS_CHANNEL_ID || 'Not set'}`);
-    console.log('');
-    console.log('Bot is ready! Type !stats in any channel to see statistics.');
+    console.log('Bot is ready! Use !stats to display stats.');
   });
 
   client.on('messageCreate', async (message) => {
+    if (message.author?.bot) return;
+
     if (message.content === '!stats') {
       const statsMessage = getStatsMessage();
       await message.channel.send(statsMessage);
@@ -159,10 +160,9 @@ async function startBot() {
     }
   }, 60000);
 
-  await client.login(DISCORD_TOKEN);
+  try {
+    await client.login(DISCORD_TOKEN);
+  } catch (err) {
+    console.error('Bot failed to login:', err);
+  }
 }
-
-startBot().catch(err => {
-  console.error('Bot failed to start:', err);
-  process.exit(1);
-});
