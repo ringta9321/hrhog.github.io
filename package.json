@@ -1,0 +1,17 @@
+{
+  "name": "discord-stats-tracker",
+  "version": "1.0.0",
+  "description": "Discord bot that tracks execution statistics",
+  "type": "module",
+  "main": "discord_stats_tracker.js",
+  "scripts": {
+    "start": "node discord_stats_tracker.js"
+  },
+  "engines": {
+    "node": "18.x"
+  },
+  "dependencies": {
+    "discord.js": "^14.14.0"
+  },
+  "license": "MIT"
+}
