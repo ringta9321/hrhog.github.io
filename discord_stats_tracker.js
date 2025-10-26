@@ -3,12 +3,18 @@ import { Client, GatewayIntentBits } from 'discord.js';
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN || '';
 const LOGS_CHANNEL_ID = process.env.LOGS_CHANNEL_ID || '';
 const STATS_CHANNEL_ID = process.env.STATS_CHANNEL_ID || '';
+const COMPARISON_CHANNEL_ID = '1432001369178636350';
 const DEBUG_NOTIFY = process.env.DEBUG_NOTIFY === 'true';
 
 const stats = {
   minute: { executions: [], users: new Set() },
   hour: { executions: [], users: new Set() },
   day: { executions: [], users: new Set() }
+};
+
+const previousStats = {
+  hour: { executions: 0, timestamp: 0 },
+  day: { executions: 0, timestamp: 0 }
 };
 
 function cleanOldStats() {
@@ -20,8 +26,20 @@ function cleanOldStats() {
   stats.minute.executions = stats.minute.executions.filter(t => now - t.timestamp < oneMinute);
   stats.minute.users = new Set([...stats.minute.executions.map(e => e.username)]);
 
+  // Update previous hour stats before cleaning
+  if (now - previousStats.hour.timestamp >= oneHour) {
+    previousStats.hour.executions = stats.hour.executions.length;
+    previousStats.hour.timestamp = now;
+  }
+
   stats.hour.executions = stats.hour.executions.filter(t => now - t.timestamp < oneHour);
   stats.hour.users = new Set([...stats.hour.executions.map(e => e.username)]);
+
+  // Update previous day stats before cleaning
+  if (now - previousStats.day.timestamp >= oneDay) {
+    previousStats.day.executions = stats.day.executions.length;
+    previousStats.day.timestamp = now;
+  }
 
   stats.day.executions = stats.day.executions.filter(t => now - t.timestamp < oneDay);
   stats.day.users = new Set([...stats.day.executions.map(e => e.username)]);
@@ -195,6 +213,22 @@ function getStatsMessage() {
 • Unique Users: ${stats.day.users.size}`;
 }
 
+function getComparisonMessage() {
+  const currentHourExecutions = stats.hour.executions.length;
+  const currentDayExecutions = stats.day.executions.length;
+  
+  const hourDiff = currentHourExecutions - previousStats.hour.executions;
+  const dayDiff = currentDayExecutions - previousStats.day.executions;
+  
+  const hourEmoji = hourDiff >= 0 ? '⬆️' : '⬇️';
+  const dayEmoji = dayDiff >= 0 ? '⬆️' : '⬇️';
+  
+  const hourMessage = `${hourEmoji} ${Math.abs(hourDiff)} executions ${hourDiff >= 0 ? 'more' : 'less'} than last hour`;
+  const dayMessage = `${dayEmoji} ${Math.abs(dayDiff)} executions ${dayDiff >= 0 ? 'more' : 'less'} than yesterday`;
+  
+  return `**📊 Execution Trend Report**\n\n**Hourly Comparison:**\n${hourMessage}\n\n**Daily Comparison:**\n${dayMessage}`;
+}
+
 async function startBot() {
   if (!DISCORD_TOKEN) {
     console.error('❌ DISCORD_TOKEN is not set!');
@@ -213,6 +247,7 @@ async function startBot() {
     console.log(`✅ Bot logged in as ${client.user.tag}`);
     console.log(`📝 Monitoring channel: ${LOGS_CHANNEL_ID || 'Not set'}`);
     console.log(`📊 Stats output channel: ${STATS_CHANNEL_ID || 'Not set'}`);
+    console.log(`📈 Comparison output channel: ${COMPARISON_CHANNEL_ID}`);
     console.log('Bot is ready! Type !stats in any channel to see statistics.');
   });
 
@@ -294,18 +329,32 @@ async function startBot() {
 
   setInterval(async () => {
     cleanOldStats();
-    if (STATS_CHANNEL_ID && stats.minute.executions.length > 0) {
-      try {
+    
+    try {
+      // Original stats message
+      if (STATS_CHANNEL_ID && stats.minute.executions.length > 0) {
         const channel = await client.channels.fetch(STATS_CHANNEL_ID);
         if (channel && channel.isTextBased()) {
           const statsMessage = getStatsMessage();
           await channel.send(statsMessage);
         }
-      } catch (error) {
-        console.error('Error posting stats:', error.message);
       }
+
+      // New comparison message
+      if (COMPARISON_CHANNEL_ID) {
+        const comparisonChannel = await client.channels.fetch(COMPARISON_CHANNEL_ID);
+        if (comparisonChannel && comparisonChannel.isTextBased()) {
+          // Only send if we have previous stats to compare against
+          if (previousStats.hour.timestamp > 0 || previousStats.day.timestamp > 0) {
+            const comparisonMessage = getComparisonMessage();
+            await comparisonChannel.send(comparisonMessage);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error posting stats or comparison:', error.message);
     }
-  }, 60000);
+  }, 60000); // Runs every minute, but comparison stats only update hourly/daily
 
   try {
     await client.login(DISCORD_TOKEN);
