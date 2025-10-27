@@ -12,50 +12,47 @@ const stats = {
   day: { executions: [], users: new Set() }
 };
 
+// previousStats stores the snapshot taken at the last hourly/daily send.
+// We update these snapshots when we send the comparison message.
 const previousStats = {
   hour: { executions: 0, users: 0, timestamp: 0 },
   day: { executions: 0, users: 0, timestamp: 0 }
 };
 
+const ONE_MINUTE = 60 * 1000;
+const ONE_HOUR = 60 * ONE_MINUTE;
+const ONE_DAY = 24 * ONE_HOUR;
+
+function getCurrentTimeFormatted() {
+  // UTC timestamp readable
+  const now = new Date();
+  return now.toISOString().replace('T', ' ').slice(0, 19);
+}
+
 function getTimeUntilNextDayReset() {
   const now = new Date();
-  const tomorrow = new Date();
-  tomorrow.setUTCHours(24, 0, 0, 0); // Set to next day at midnight UTC
-  
+  // compute next midnight in UTC
+  const tomorrow = new Date(now);
+  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+  tomorrow.setUTCHours(0, 0, 0, 0);
+
   const msUntilReset = tomorrow - now;
   const hoursUntilReset = Math.floor(msUntilReset / (1000 * 60 * 60));
   const minutesUntilReset = Math.floor((msUntilReset % (1000 * 60 * 60)) / (1000 * 60));
-  
+
   return `${hoursUntilReset}h ${minutesUntilReset}m`;
 }
 
 function cleanOldStats() {
   const now = Date.now();
-  const oneMinute = 60 * 1000;
-  const oneHour = 60 * oneMinute;
-  const oneDay = 24 * oneHour;
 
-  stats.minute.executions = stats.minute.executions.filter(t => now - t.timestamp < oneMinute);
+  stats.minute.executions = stats.minute.executions.filter(t => now - t.timestamp < ONE_MINUTE);
   stats.minute.users = new Set([...stats.minute.executions.map(e => e.username)]);
 
-  // Update previous hour stats before cleaning
-  if (now - previousStats.hour.timestamp >= oneHour) {
-    previousStats.hour.executions = stats.hour.executions.length;
-    previousStats.hour.users = stats.hour.users.size;
-    previousStats.hour.timestamp = now;
-  }
-
-  stats.hour.executions = stats.hour.executions.filter(t => now - t.timestamp < oneHour);
+  stats.hour.executions = stats.hour.executions.filter(t => now - t.timestamp < ONE_HOUR);
   stats.hour.users = new Set([...stats.hour.executions.map(e => e.username)]);
 
-  // Update previous day stats before cleaning
-  if (now - previousStats.day.timestamp >= oneDay) {
-    previousStats.day.executions = stats.day.executions.length;
-    previousStats.day.users = stats.day.users.size;
-    previousStats.day.timestamp = now;
-  }
-
-  stats.day.executions = stats.day.executions.filter(t => now - t.timestamp < oneDay);
+  stats.day.executions = stats.day.executions.filter(t => now - t.timestamp < ONE_DAY);
   stats.day.users = new Set([...stats.day.executions.map(e => e.username)]);
 }
 
@@ -73,7 +70,7 @@ async function resolveMentionToUsername(mentionText, message) {
     const user = await message.client.users.fetch(id).catch(() => null);
     if (user) return user.username;
   } catch (e) {
-    // ignore
+    // swallow errors
   }
   return null;
 }
@@ -81,7 +78,7 @@ async function resolveMentionToUsername(mentionText, message) {
 async function parseExecutionFromEmbed(embed, message) {
   if (!embed) return null;
 
-  // Look in fields for obvious names (case-insensitive)
+  // fields search
   if (Array.isArray(embed.fields) && embed.fields.length > 0) {
     const possibleNames = ['username', 'user', 'executor', 'executed by', 'author', 'userid', 'user id'];
     for (const f of embed.fields) {
@@ -89,15 +86,12 @@ async function parseExecutionFromEmbed(embed, message) {
       const name = (f.name || '').toString().toLowerCase();
       const value = (f.value || '').toString();
 
-      // If the field name matches, prefer its value
       if (possibleNames.includes(name)) {
-        // If the value contains a mention like <@123>, resolve it
         const mentionMatch = value.match(/<@!?\d+>/);
         if (mentionMatch) {
           const resolved = await resolveMentionToUsername(mentionMatch[0], message);
           if (resolved) return resolved;
         }
-        // If field is userId but value is numeric, skip to resolving if possible
         if (name === 'userid' || name === 'user id') {
           const idMatch = value.match(/(\d{17,19})/);
           if (idMatch) {
@@ -109,21 +103,21 @@ async function parseExecutionFromEmbed(embed, message) {
         return value.split('\n')[0].trim();
       }
 
-      // If a value contains a mention, try resolving
+      // if a value contains a mention, try resolving
       const mentionInValue = value.match(/<@!?\d+>/);
       if (mentionInValue) {
         const resolved = await resolveMentionToUsername(mentionInValue[0], message);
         if (resolved) return resolved;
       }
 
-      // Try to extract username: pattern inside combined name+value
+      // combined name+value heuristics
       const combined = `${f.name || ''} ${f.value || ''}`;
       const m = combined.match(/username[:\s]*([^\s,]+)/i);
       if (m) return m[1];
     }
   }
 
-  // author field
+  // author
   if (embed.author && embed.author.name) {
     const authorName = embed.author.name.toString();
     const mentionMatch = authorName.match(/<@!?\d+>/);
@@ -134,7 +128,7 @@ async function parseExecutionFromEmbed(embed, message) {
     return authorName;
   }
 
-  // title and description checks
+  // title
   if (embed.title) {
     const title = embed.title.toString();
     const mentionMatch = title.match(/<@!?\d+>/);
@@ -147,6 +141,7 @@ async function parseExecutionFromEmbed(embed, message) {
     if (title.split(/\s+/).length <= 4) return title.trim();
   }
 
+  // description
   if (embed.description) {
     const desc = embed.description.toString();
     const mentionMatch = desc.match(/<@!?\d+>/);
@@ -158,6 +153,7 @@ async function parseExecutionFromEmbed(embed, message) {
     if (m) return m[1];
   }
 
+  // footer
   if (embed.footer && embed.footer.text) {
     const footer = embed.footer.text.toString();
     const m = footer.match(/username[:\s]*([^\s,]+)/i);
@@ -212,7 +208,7 @@ function trackExecution(username) {
 
 function getStatsMessage() {
   cleanOldStats();
-  return `**📊 Execution Statistics**
+  return `**📊 Execution Statistics** (${getCurrentTimeFormatted()} UTC)
 
 **Last Minute:**
 • Executions: ${stats.minute.executions.length}
@@ -228,29 +224,31 @@ function getStatsMessage() {
 }
 
 function getComparisonMessage() {
+  // compute current values
   const currentHourExecutions = stats.hour.executions.length;
   const currentHourUsers = stats.hour.users.size;
   const currentDayExecutions = stats.day.executions.length;
   const currentDayUsers = stats.day.users.size;
-  
-  const hourExecDiff = currentHourExecutions - previousStats.hour.executions;
-  const hourUsersDiff = currentHourUsers - previousStats.hour.users;
-  const dayExecDiff = currentDayExecutions - previousStats.day.executions;
-  const dayUsersDiff = currentDayUsers - previousStats.day.users;
-  
+
+  // diffs vs previous snapshots
+  const hourExecDiff = currentHourExecutions - (previousStats.hour.executions || 0);
+  const hourUsersDiff = currentHourUsers - (previousStats.hour.users || 0);
+  const dayExecDiff = currentDayExecutions - (previousStats.day.executions || 0);
+  const dayUsersDiff = currentDayUsers - (previousStats.day.users || 0);
+
   const hourExecEmoji = hourExecDiff >= 0 ? '⬆️' : '⬇️';
   const hourUsersEmoji = hourUsersDiff >= 0 ? '⬆️' : '⬇️';
   const dayExecEmoji = dayExecDiff >= 0 ? '⬆️' : '⬇️';
   const dayUsersEmoji = dayUsersDiff >= 0 ? '⬆️' : '⬇️';
-  
-  const hourExecMessage = `${hourExecEmoji} ${Math.abs(hourExecDiff)} executions ${hourExecDiff >= 0 ? 'more' : 'less'} than last hour`;
-  const hourUsersMessage = `${hourUsersEmoji} ${Math.abs(hourUsersDiff)} unique users ${hourUsersDiff >= 0 ? 'more' : 'less'} than last hour`;
-  const dayExecMessage = `${dayExecEmoji} ${Math.abs(dayExecDiff)} executions ${dayExecDiff >= 0 ? 'more' : 'less'} than yesterday`;
-  const dayUsersMessage = `${dayUsersEmoji} ${Math.abs(dayUsersDiff)} unique users ${dayUsersDiff >= 0 ? 'more' : 'less'} than yesterday`;
-  
+
+  const hourExecMessage = `${hourExecEmoji} ${Math.abs(hourExecDiff)} executions ${hourExecDiff >= 0 ? 'more' : 'less'} than the previous snapshot`;
+  const hourUsersMessage = `${hourUsersEmoji} ${Math.abs(hourUsersDiff)} unique users ${hourUsersDiff >= 0 ? 'more' : 'less'} than the previous snapshot`;
+  const dayExecMessage = `${dayExecEmoji} ${Math.abs(dayExecDiff)} executions ${dayExecDiff >= 0 ? 'more' : 'less'} than the previous snapshot`;
+  const dayUsersMessage = `${dayUsersEmoji} ${Math.abs(dayUsersDiff)} unique users ${dayUsersDiff >= 0 ? 'more' : 'less'} than the previous snapshot`;
+
   const timeUntilReset = getTimeUntilNextDayReset();
-  
-  return `**📊 Execution Trend Report**
+
+  return `**📊 Execution Trend Report** (${getCurrentTimeFormatted()} UTC)
 
 **Hourly Comparison:**
 ${hourExecMessage}
@@ -277,29 +275,53 @@ async function startBot() {
     ]
   });
 
-  client.on('ready', () => {
+  let lastHourIndex = 0;
+  let lastDayIndex = 0;
+
+  client.on('ready', async () => {
     console.log(`✅ Bot logged in as ${client.user.tag}`);
     console.log(`📝 Monitoring channel: ${LOGS_CHANNEL_ID || 'Not set'}`);
     console.log(`📊 Stats output channel: ${STATS_CHANNEL_ID || 'Not set'}`);
     console.log(`📈 Comparison output channel: ${COMPARISON_CHANNEL_ID}`);
+    console.log(`🕒 Current time (UTC): ${getCurrentTimeFormatted()}`);
     console.log('Bot is ready! Type !stats in any channel to see statistics.');
+
+    // initialize lastHourIndex/lastDayIndex and previous snapshots so the bot will send on the first boundary
+    const now = Date.now();
+    lastHourIndex = Math.floor(now / ONE_HOUR);
+    lastDayIndex = Math.floor(now / ONE_DAY);
+
+    // take initial snapshots
+    cleanOldStats();
+    previousStats.hour = {
+      executions: stats.hour.executions.length,
+      users: stats.hour.users.size,
+      timestamp: now
+    };
+    previousStats.day = {
+      executions: stats.day.executions.length,
+      users: stats.day.users.size,
+      timestamp: now
+    };
+
+    console.log(`Initial snapshots set. hour:${previousStats.hour.executions} execs, ${previousStats.hour.users} users; day:${previousStats.day.executions} execs, ${previousStats.day.users} users`);
   });
 
   client.on('messageCreate', async (message) => {
-    // ignore other bots but allow webhook messages (webhooks set message.webhookId)
+    // ignore other bots but allow webhooks (webhookId is present)
     if (message.author?.bot && !message.webhookId) return;
 
-    // respond to !stats
+    // respond to !stats command
     if (message.content === '!stats') {
-      const statsMessage = getStatsMessage();
       try {
-        await message.channel.send(statsMessage);
+        await message.channel.send(getStatsMessage());
       } catch (err) {
         console.error('Failed to send !stats reply:', err);
       }
       return;
     }
 
+    // only process messages from configured LOGS_CHANNEL_ID
     if (LOGS_CHANNEL_ID && String(message.channel.id) === String(LOGS_CHANNEL_ID)) {
       try {
         console.log('--- Incoming message in LOGS_CHANNEL ---');
@@ -317,21 +339,25 @@ async function startBot() {
 
       let username = null;
 
-      // preference: explicit mention
+      // prefer explicit mention
       if (message.mentions && message.mentions.users.size > 0) {
         const u = message.mentions.users.first();
         if (u) username = u.username;
       }
 
-      // parse embed
+      // parse embeds if no mention
       if (!username && message.embeds && message.embeds.length > 0) {
         for (const embed of message.embeds) {
-          username = await parseExecutionFromEmbed(embed, message);
-          if (username) break;
+          try {
+            username = await parseExecutionFromEmbed(embed, message);
+            if (username) break;
+          } catch (err) {
+            // continue on parse error
+          }
         }
       }
 
-      // fallback to content
+      // fallback to content parsing
       if (!username && message.content) {
         username = parseExecutionLog(message.content, message);
         if (username && username.startsWith('<@')) {
@@ -342,7 +368,7 @@ async function startBot() {
 
       if (username) {
         trackExecution(username);
-        console.log(`✅ Tracked execution by: ${username}`);
+        console.log(`✅ [${getCurrentTimeFormatted()}] Tracked execution by: ${username}`);
 
         if (DEBUG_NOTIFY && STATS_CHANNEL_ID) {
           try {
@@ -360,39 +386,81 @@ async function startBot() {
     }
   });
 
+  // run checks every minute
   setInterval(async () => {
     const now = Date.now();
-    cleanOldStats();
-    
     try {
-      // Original stats message
+      cleanOldStats();
+
+      // send stats message to STATS_CHANNEL_ID every minute if there are minute executions
       if (STATS_CHANNEL_ID && stats.minute.executions.length > 0) {
-        const channel = await client.channels.fetch(STATS_CHANNEL_ID);
-        if (channel && channel.isTextBased()) {
-          const statsMessage = getStatsMessage();
-          await channel.send(statsMessage);
+        try {
+          const channel = await client.channels.fetch(STATS_CHANNEL_ID);
+          if (channel && channel.isTextBased()) {
+            await channel.send(getStatsMessage());
+          }
+        } catch (err) {
+          console.error('Failed to send stats message:', err?.message || err);
         }
       }
 
-      // New comparison message - only send on hourly/daily intervals
+      // comparison channel hourly/daily
       if (COMPARISON_CHANNEL_ID) {
-        const comparisonChannel = await client.channels.fetch(COMPARISON_CHANNEL_ID);
-        if (comparisonChannel && comparisonChannel.isTextBased()) {
-          const shouldSendHourly = now - previousStats.hour.timestamp >= 60 * 60 * 1000;
-          const shouldSendDaily = now - previousStats.day.timestamp >= 24 * 60 * 60 * 1000;
-          
-          // Only send if we have previous stats to compare against AND it's time for an update
-          if ((shouldSendHourly || shouldSendDaily) && 
-              (previousStats.hour.timestamp > 0 || previousStats.day.timestamp > 0)) {
-            const comparisonMessage = getComparisonMessage();
-            await comparisonChannel.send(comparisonMessage);
+        const currentHourIndex = Math.floor(now / ONE_HOUR);
+        const currentDayIndex = Math.floor(now / ONE_DAY);
+
+        // Hour rollover: send hourly comparison once per new hour
+        if (currentHourIndex > lastHourIndex) {
+          lastHourIndex = currentHourIndex;
+
+          // Build and send comparison message
+          try {
+            const channel = await client.channels.fetch(COMPARISON_CHANNEL_ID);
+            if (channel && channel.isTextBased()) {
+              const comparisonMessage = getComparisonMessage();
+              await channel.send(comparisonMessage);
+              console.log(`📊 [${getCurrentTimeFormatted()}] Sent hourly comparison update to ${COMPARISON_CHANNEL_ID}`);
+            }
+          } catch (err) {
+            console.error('Failed to send hourly comparison message:', err?.message || err);
           }
+
+          // update previous hour snapshot AFTER sending (so next hour diff compares against this hour)
+          previousStats.hour = {
+            executions: stats.hour.executions.length,
+            users: stats.hour.users.size,
+            timestamp: now
+          };
+        }
+
+        // Day rollover: send daily comparison once per new day and a "New Day Started!" message
+        if (currentDayIndex > lastDayIndex) {
+          lastDayIndex = currentDayIndex;
+
+          try {
+            const channel = await client.channels.fetch(COMPARISON_CHANNEL_ID);
+            if (channel && channel.isTextBased()) {
+              const header = `🌅 **New Day Started!** (${getCurrentTimeFormatted()} UTC)`;
+              const comparisonMessage = getComparisonMessage();
+              await channel.send(`${header}\n\n${comparisonMessage}`);
+              console.log(`🌅 [${getCurrentTimeFormatted()}] Sent daily comparison update to ${COMPARISON_CHANNEL_ID}`);
+            }
+          } catch (err) {
+            console.error('Failed to send daily comparison message:', err?.message || err);
+          }
+
+          // update previous day snapshot AFTER sending
+          previousStats.day = {
+            executions: stats.day.executions.length,
+            users: stats.day.users.size,
+            timestamp: now
+          };
         }
       }
     } catch (error) {
-      console.error('Error posting stats or comparison:', error.message);
+      console.error(`Error [${getCurrentTimeFormatted()}]:`, error?.message || error);
     }
-  }, 60000); // Still runs every minute for regular stats, but comparison messages are controlled
+  }, ONE_MINUTE);
 
   try {
     await client.login(DISCORD_TOKEN);
