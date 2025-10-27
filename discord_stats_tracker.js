@@ -13,9 +13,21 @@ const stats = {
 };
 
 const previousStats = {
-  hour: { executions: 0, timestamp: 0 },
-  day: { executions: 0, timestamp: 0 }
+  hour: { executions: 0, users: 0, timestamp: 0 },
+  day: { executions: 0, users: 0, timestamp: 0 }
 };
+
+function getTimeUntilNextDayReset() {
+  const now = new Date();
+  const tomorrow = new Date();
+  tomorrow.setUTCHours(24, 0, 0, 0); // Set to next day at midnight UTC
+  
+  const msUntilReset = tomorrow - now;
+  const hoursUntilReset = Math.floor(msUntilReset / (1000 * 60 * 60));
+  const minutesUntilReset = Math.floor((msUntilReset % (1000 * 60 * 60)) / (1000 * 60));
+  
+  return `${hoursUntilReset}h ${minutesUntilReset}m`;
+}
 
 function cleanOldStats() {
   const now = Date.now();
@@ -29,6 +41,7 @@ function cleanOldStats() {
   // Update previous hour stats before cleaning
   if (now - previousStats.hour.timestamp >= oneHour) {
     previousStats.hour.executions = stats.hour.executions.length;
+    previousStats.hour.users = stats.hour.users.size;
     previousStats.hour.timestamp = now;
   }
 
@@ -38,6 +51,7 @@ function cleanOldStats() {
   // Update previous day stats before cleaning
   if (now - previousStats.day.timestamp >= oneDay) {
     previousStats.day.executions = stats.day.executions.length;
+    previousStats.day.users = stats.day.users.size;
     previousStats.day.timestamp = now;
   }
 
@@ -215,18 +229,38 @@ function getStatsMessage() {
 
 function getComparisonMessage() {
   const currentHourExecutions = stats.hour.executions.length;
+  const currentHourUsers = stats.hour.users.size;
   const currentDayExecutions = stats.day.executions.length;
+  const currentDayUsers = stats.day.users.size;
   
-  const hourDiff = currentHourExecutions - previousStats.hour.executions;
-  const dayDiff = currentDayExecutions - previousStats.day.executions;
+  const hourExecDiff = currentHourExecutions - previousStats.hour.executions;
+  const hourUsersDiff = currentHourUsers - previousStats.hour.users;
+  const dayExecDiff = currentDayExecutions - previousStats.day.executions;
+  const dayUsersDiff = currentDayUsers - previousStats.day.users;
   
-  const hourEmoji = hourDiff >= 0 ? '⬆️' : '⬇️';
-  const dayEmoji = dayDiff >= 0 ? '⬆️' : '⬇️';
+  const hourExecEmoji = hourExecDiff >= 0 ? '⬆️' : '⬇️';
+  const hourUsersEmoji = hourUsersDiff >= 0 ? '⬆️' : '⬇️';
+  const dayExecEmoji = dayExecDiff >= 0 ? '⬆️' : '⬇️';
+  const dayUsersEmoji = dayUsersDiff >= 0 ? '⬆️' : '⬇️';
   
-  const hourMessage = `${hourEmoji} ${Math.abs(hourDiff)} executions ${hourDiff >= 0 ? 'more' : 'less'} than last hour`;
-  const dayMessage = `${dayEmoji} ${Math.abs(dayDiff)} executions ${dayDiff >= 0 ? 'more' : 'less'} than yesterday`;
+  const hourExecMessage = `${hourExecEmoji} ${Math.abs(hourExecDiff)} executions ${hourExecDiff >= 0 ? 'more' : 'less'} than last hour`;
+  const hourUsersMessage = `${hourUsersEmoji} ${Math.abs(hourUsersDiff)} unique users ${hourUsersDiff >= 0 ? 'more' : 'less'} than last hour`;
+  const dayExecMessage = `${dayExecEmoji} ${Math.abs(dayExecDiff)} executions ${dayExecDiff >= 0 ? 'more' : 'less'} than yesterday`;
+  const dayUsersMessage = `${dayUsersEmoji} ${Math.abs(dayUsersDiff)} unique users ${dayUsersDiff >= 0 ? 'more' : 'less'} than yesterday`;
   
-  return `**📊 Execution Trend Report**\n\n**Hourly Comparison:**\n${hourMessage}\n\n**Daily Comparison:**\n${dayMessage}`;
+  const timeUntilReset = getTimeUntilNextDayReset();
+  
+  return `**📊 Execution Trend Report**
+
+**Hourly Comparison:**
+${hourExecMessage}
+${hourUsersMessage}
+
+**Daily Comparison:**
+${dayExecMessage}
+${dayUsersMessage}
+
+⏰ **New Day Reset In:** ${timeUntilReset}`;
 }
 
 async function startBot() {
@@ -267,7 +301,6 @@ async function startBot() {
     }
 
     if (LOGS_CHANNEL_ID && String(message.channel.id) === String(LOGS_CHANNEL_ID)) {
-      // Debug log: show raw embed JSON so you can paste it here if parsing fails
       try {
         console.log('--- Incoming message in LOGS_CHANNEL ---');
         console.log('author:', message.author?.tag || message.author?.id || `webhookId:${message.webhookId}`);
@@ -328,6 +361,7 @@ async function startBot() {
   });
 
   setInterval(async () => {
+    const now = Date.now();
     cleanOldStats();
     
     try {
@@ -340,12 +374,16 @@ async function startBot() {
         }
       }
 
-      // New comparison message
+      // New comparison message - only send on hourly/daily intervals
       if (COMPARISON_CHANNEL_ID) {
         const comparisonChannel = await client.channels.fetch(COMPARISON_CHANNEL_ID);
         if (comparisonChannel && comparisonChannel.isTextBased()) {
-          // Only send if we have previous stats to compare against
-          if (previousStats.hour.timestamp > 0 || previousStats.day.timestamp > 0) {
+          const shouldSendHourly = now - previousStats.hour.timestamp >= 60 * 60 * 1000;
+          const shouldSendDaily = now - previousStats.day.timestamp >= 24 * 60 * 60 * 1000;
+          
+          // Only send if we have previous stats to compare against AND it's time for an update
+          if ((shouldSendHourly || shouldSendDaily) && 
+              (previousStats.hour.timestamp > 0 || previousStats.day.timestamp > 0)) {
             const comparisonMessage = getComparisonMessage();
             await comparisonChannel.send(comparisonMessage);
           }
@@ -354,7 +392,7 @@ async function startBot() {
     } catch (error) {
       console.error('Error posting stats or comparison:', error.message);
     }
-  }, 60000); // Runs every minute, but comparison stats only update hourly/daily
+  }, 60000); // Still runs every minute for regular stats, but comparison messages are controlled
 
   try {
     await client.login(DISCORD_TOKEN);
