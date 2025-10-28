@@ -23,7 +23,13 @@ const ONE_DAY = 24 * ONE_HOUR;
 
 function getCurrentTimeFormatted() {
   const now = new Date();
-  return now.toISOString().replace('T', ' ').slice(0, 19);
+  const year = now.getUTCFullYear();
+  const month = String(now.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(now.getUTCDate()).padStart(2, '0');
+  const hours = String(now.getUTCHours()).padStart(2, '0');
+  const minutes = String(now.getUTCMinutes()).padStart(2, '0');
+  const seconds = String(now.getUTCSeconds()).padStart(2, '0');
+  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
 }
 
 function getTimeUntilNextDayReset() {
@@ -65,8 +71,7 @@ async function resolveMentionToUsername(mentionText, message) {
     }
     const user = await message.client.users.fetch(id).catch(() => null);
     if (user) return user.username;
-  } catch (e) {
-  }
+  } catch (e) {}
   return null;
 }
 
@@ -196,7 +201,7 @@ function trackExecution(username) {
 
 function getStatsMessage() {
   cleanOldStats();
-  return `**📊 Execution Statistics** (${getCurrentTimeFormatted()} UTC)
+  return `**📊 Execution Statistics** (${getCurrentTimeFormatted()})
 
 **Last Minute:**
 • Executions: ${stats.minute.executions.length}
@@ -234,7 +239,7 @@ function getComparisonMessage() {
 
   const timeUntilReset = getTimeUntilNextDayReset();
 
-  return `**📊 Execution Trend Report** (${getCurrentTimeFormatted()} UTC)
+  return `**📊 Execution Trend Report** (${getCurrentTimeFormatted()})
 
 **Hourly Comparison:**
 ${hourExecMessage}
@@ -269,7 +274,7 @@ async function startBot() {
     console.log(`📝 Monitoring channel: ${LOGS_CHANNEL_ID || 'Not set'}`);
     console.log(`📊 Stats output channel: ${STATS_CHANNEL_ID || 'Not set'}`);
     console.log(`📈 Comparison output channel: ${COMPARISON_CHANNEL_ID}`);
-    console.log(`🕒 Current time (UTC): ${getCurrentTimeFormatted()}`);
+    console.log(`🕒 Current time: ${getCurrentTimeFormatted()}`);
     console.log('Bot is ready! Type !stats in any channel to see statistics.');
 
     const now = Date.now();
@@ -314,8 +319,7 @@ async function startBot() {
           try {
             username = await parseExecutionFromEmbed(embed, message);
             if (username) break;
-          } catch (err) {
-          }
+          } catch (err) {}
         }
       }
 
@@ -383,6 +387,9 @@ async function startBot() {
             users: stats.hour.users.size,
             timestamp: now
           };
+
+          stats.hour.executions = [];
+          stats.hour.users = new Set();
         }
 
         if (currentDayIndex > lastDayIndex) {
@@ -391,7 +398,7 @@ async function startBot() {
           try {
             const channel = await client.channels.fetch(COMPARISON_CHANNEL_ID);
             if (channel && channel.isTextBased()) {
-              const header = `🌅 **New Day Started!** (${getCurrentTimeFormatted()} UTC)`;
+              const header = `🌅 **New Day Started!** (${getCurrentTimeFormatted()})`;
               const comparisonMessage = getComparisonMessage();
               await channel.send(`${header}\n\n${comparisonMessage}`);
             }
@@ -408,9 +415,6 @@ async function startBot() {
           stats.day.executions = [];
           stats.day.users = new Set();
         }
-
-        stats.hour.executions = [];
-        stats.hour.users = new Set();
       }
     } catch (error) {
       console.error(`Error [${getCurrentTimeFormatted()}]:`, error?.message || error);
