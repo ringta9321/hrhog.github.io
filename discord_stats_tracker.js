@@ -82,6 +82,19 @@ function getTimeUntilNextDayReset() {
   return `${hoursUntilReset}h ${minutesUntilReset}m`;
 }
 
+function getTimeUntilNextHour() {
+  const now = new Date();
+  const nextHour = new Date(now);
+  nextHour.setUTCHours(nextHour.getUTCHours() + 1);
+  nextHour.setUTCMinutes(0, 0, 0);
+
+  const msUntilNextHour = nextHour - now;
+  const minutesUntilNextHour = Math.floor(msUntilNextHour / (1000 * 60));
+  const secondsUntilNextHour = Math.floor((msUntilNextHour % (1000 * 60)) / 1000);
+
+  return `${minutesUntilNextHour}m ${secondsUntilNextHour}s`;
+}
+
 function cleanOldStats() {
   const now = Date.now();
 
@@ -265,7 +278,7 @@ function getSingleGameStats(game) {
 • Unique Users: ${stats[game].day.users.size}`;
 }
 
-function getStatsMessage(isNewHour = false) {
+function getStatsMessage() {
   cleanOldStats();
   
   const separator = '\n\n\n';
@@ -277,9 +290,10 @@ function getStatsMessage(isNewHour = false) {
     getSingleGameStats('forsaken')
   ];
   
-  const newHourBanner = isNewHour ? '🕐 **NEW HOUR!** 🕐\n\n' : '';
+  const timeUntilNextHour = getTimeUntilNextHour();
   
-  return `${newHourBanner}**📊 ALL GAMES - Execution Statistics** (${getCurrentTimeFormatted()})
+  return `**📊 ALL GAMES - Execution Statistics** (${getCurrentTimeFormatted()})
+⏰ **Next Hour In:** ${timeUntilNextHour}
 
 ${allStats.join(separator)}`;
 }
@@ -457,7 +471,6 @@ async function startBot() {
 
       const currentHourIndex = Math.floor(now / ONE_HOUR);
       const currentDayIndex = Math.floor(now / ONE_DAY);
-      const isNewHour = currentHourIndex > lastHourIndex;
 
       let hasExecutions = false;
       for (const game in stats) {
@@ -471,7 +484,7 @@ async function startBot() {
         try {
           const channel = await client.channels.fetch(STATS_CHANNEL_ID);
           if (channel && channel.isTextBased()) {
-            await channel.send(getStatsMessage(isNewHour));
+            await channel.send(getStatsMessage());
           }
         } catch (err) {
           console.error('Failed to send stats message:', err?.message || err);
