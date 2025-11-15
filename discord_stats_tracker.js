@@ -1,20 +1,57 @@
 import { Client, GatewayIntentBits } from 'discord.js';
 
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN || '';
-const LOGS_CHANNEL_ID = process.env.LOGS_CHANNEL_ID || '';
-const STATS_CHANNEL_ID = process.env.STATS_CHANNEL_ID || '';
-const COMPARISON_CHANNEL_ID = '1432001369178636350';
+const STATS_CHANNEL_ID = '1429696356859248740';
+const COMPARISON_CHANNEL_ID = '1429967291906265230';
 const DEBUG_NOTIFY = process.env.DEBUG_NOTIFY === 'true';
 
+const CHANNELS = {
+  '99nights': process.env.LOGS_CHANNEL_ID || '',
+  'inkgames': '1393631891147718756',
+  'steala': '1400585444001054730',
+  'forsaken': '1396894093900120105'
+};
+
 const stats = {
-  minute: { executions: [], users: new Set() },
-  hour: { executions: [], users: new Set() },
-  day: { executions: [], users: new Set() }
+  '99nights': {
+    minute: { executions: [], users: new Set() },
+    hour: { executions: [], users: new Set() },
+    day: { executions: [], users: new Set() }
+  },
+  'inkgames': {
+    minute: { executions: [], users: new Set() },
+    hour: { executions: [], users: new Set() },
+    day: { executions: [], users: new Set() }
+  },
+  'steala': {
+    minute: { executions: [], users: new Set() },
+    hour: { executions: [], users: new Set() },
+    day: { executions: [], users: new Set() }
+  },
+  'forsaken': {
+    minute: { executions: [], users: new Set() },
+    hour: { executions: [], users: new Set() },
+    day: { executions: [], users: new Set() }
+  }
 };
 
 const previousStats = {
-  hour: { executions: 0, users: 0, timestamp: 0 },
-  day: { executions: 0, users: 0, timestamp: 0 }
+  '99nights': {
+    hour: { executions: 0, users: 0, timestamp: 0 },
+    day: { executions: 0, users: 0, timestamp: 0 }
+  },
+  'inkgames': {
+    hour: { executions: 0, users: 0, timestamp: 0 },
+    day: { executions: 0, users: 0, timestamp: 0 }
+  },
+  'steala': {
+    hour: { executions: 0, users: 0, timestamp: 0 },
+    day: { executions: 0, users: 0, timestamp: 0 }
+  },
+  'forsaken': {
+    hour: { executions: 0, users: 0, timestamp: 0 },
+    day: { executions: 0, users: 0, timestamp: 0 }
+  }
 };
 
 const ONE_MINUTE = 60 * 1000;
@@ -48,14 +85,16 @@ function getTimeUntilNextDayReset() {
 function cleanOldStats() {
   const now = Date.now();
 
-  stats.minute.executions = stats.minute.executions.filter(t => now - t.timestamp < ONE_MINUTE);
-  stats.minute.users = new Set([...stats.minute.executions.map(e => e.username)]);
+  for (const game in stats) {
+    stats[game].minute.executions = stats[game].minute.executions.filter(t => now - t.timestamp < ONE_MINUTE);
+    stats[game].minute.users = new Set([...stats[game].minute.executions.map(e => e.username)]);
 
-  stats.hour.executions = stats.hour.executions.filter(t => now - t.timestamp < ONE_HOUR);
-  stats.hour.users = new Set([...stats.hour.executions.map(e => e.username)]);
+    stats[game].hour.executions = stats[game].hour.executions.filter(t => now - t.timestamp < ONE_HOUR);
+    stats[game].hour.users = new Set([...stats[game].hour.executions.map(e => e.username)]);
 
-  stats.day.executions = stats.day.executions.filter(t => now - t.timestamp < ONE_DAY);
-  stats.day.users = new Set([...stats.day.executions.map(e => e.username)]);
+    stats[game].day.executions = stats[game].day.executions.filter(t => now - t.timestamp < ONE_DAY);
+    stats[game].day.users = new Set([...stats[game].day.executions.map(e => e.username)]);
+  }
 }
 
 async function resolveMentionToUsername(mentionText, message) {
@@ -183,49 +222,79 @@ function parseExecutionLog(messageContent, message) {
   return null;
 }
 
-function trackExecution(username) {
+function trackExecution(username, game) {
   const now = Date.now();
   const execution = { username, timestamp: now };
 
-  stats.minute.executions.push(execution);
-  stats.minute.users.add(username);
+  stats[game].minute.executions.push(execution);
+  stats[game].minute.users.add(username);
 
-  stats.hour.executions.push(execution);
-  stats.hour.users.add(username);
+  stats[game].hour.executions.push(execution);
+  stats[game].hour.users.add(username);
 
-  stats.day.executions.push(execution);
-  stats.day.users.add(username);
+  stats[game].day.executions.push(execution);
+  stats[game].day.users.add(username);
 
   cleanOldStats();
+}
+
+function getGameName(game) {
+  const names = {
+    '99nights': '99 Nights',
+    'inkgames': 'iNK GAMES',
+    'steala': 'Steala',
+    'forsaken': 'Forsaken'
+  };
+  return names[game] || game;
+}
+
+function getSingleGameStats(game) {
+  cleanOldStats();
+  const gameName = getGameName(game);
+  
+  return `**📊 ${gameName} - Execution Statistics**
+
+**Last Minute:**
+• Executions: ${stats[game].minute.executions.length}
+• Unique Users: ${stats[game].minute.users.size}
+
+**Last Hour:**
+• Executions: ${stats[game].hour.executions.length}
+• Unique Users: ${stats[game].hour.users.size}
+
+**Last 24 Hours:**
+• Executions: ${stats[game].day.executions.length}
+• Unique Users: ${stats[game].day.users.size}`;
 }
 
 function getStatsMessage() {
   cleanOldStats();
-  return `**📊 Execution Statistics** (${getCurrentTimeFormatted()})
+  
+  const separator = '\n\n\n\n\n';
+  
+  const allStats = [
+    getSingleGameStats('99nights'),
+    getSingleGameStats('inkgames'),
+    getSingleGameStats('steala'),
+    getSingleGameStats('forsaken')
+  ];
+  
+  return `**📊 ALL GAMES - Execution Statistics** (${getCurrentTimeFormatted()})
 
-**Last Minute:**
-• Executions: ${stats.minute.executions.length}
-• Unique Users: ${stats.minute.users.size}
-
-**Last Hour:**
-• Executions: ${stats.hour.executions.length}
-• Unique Users: ${stats.hour.users.size}
-
-**Last 24 Hours:**
-• Executions: ${stats.day.executions.length}
-• Unique Users: ${stats.day.users.size}`;
+${allStats.join(separator)}`;
 }
 
-function getComparisonMessage() {
-  const currentHourExecutions = stats.hour.executions.length;
-  const currentHourUsers = stats.hour.users.size;
-  const currentDayExecutions = stats.day.executions.length;
-  const currentDayUsers = stats.day.users.size;
+function getSingleGameComparison(game) {
+  const gameName = getGameName(game);
+  const currentHourExecutions = stats[game].hour.executions.length;
+  const currentHourUsers = stats[game].hour.users.size;
+  const currentDayExecutions = stats[game].day.executions.length;
+  const currentDayUsers = stats[game].day.users.size;
 
-  const hourExecDiff = currentHourExecutions - (previousStats.hour.executions || 0);
-  const hourUsersDiff = currentHourUsers - (previousStats.hour.users || 0);
-  const dayExecDiff = currentDayExecutions - (previousStats.day.executions || 0);
-  const dayUsersDiff = currentDayUsers - (previousStats.day.users || 0);
+  const hourExecDiff = currentHourExecutions - (previousStats[game].hour.executions || 0);
+  const hourUsersDiff = currentHourUsers - (previousStats[game].hour.users || 0);
+  const dayExecDiff = currentDayExecutions - (previousStats[game].day.executions || 0);
+  const dayUsersDiff = currentDayUsers - (previousStats[game].day.users || 0);
 
   const hourExecEmoji = hourExecDiff >= 0 ? '⬆️' : '⬇️';
   const hourUsersEmoji = hourUsersDiff >= 0 ? '⬆️' : '⬇️';
@@ -237,9 +306,7 @@ function getComparisonMessage() {
   const dayExecMessage = `${dayExecEmoji} ${Math.abs(dayExecDiff)} executions ${dayExecDiff >= 0 ? 'more' : 'less'} than previous day (Current: ${currentDayExecutions})`;
   const dayUsersMessage = `${dayUsersEmoji} ${Math.abs(dayUsersDiff)} unique users ${dayUsersDiff >= 0 ? 'more' : 'less'} than previous day (Current: ${currentDayUsers})`;
 
-  const timeUntilReset = getTimeUntilNextDayReset();
-
-  return `**📊 Execution Trend Report** (${getCurrentTimeFormatted()})
+  return `**📊 ${gameName} - Execution Trend Report**
 
 **Hourly Comparison:**
 ${hourExecMessage}
@@ -247,9 +314,35 @@ ${hourUsersMessage}
 
 **Daily Comparison:**
 ${dayExecMessage}
-${dayUsersMessage}
+${dayUsersMessage}`;
+}
+
+function getComparisonMessage() {
+  const separator = '\n\n\n\n\n';
+  
+  const allComparisons = [
+    getSingleGameComparison('99nights'),
+    getSingleGameComparison('inkgames'),
+    getSingleGameComparison('steala'),
+    getSingleGameComparison('forsaken')
+  ];
+  
+  const timeUntilReset = getTimeUntilNextDayReset();
+  
+  return `**📊 ALL GAMES - Execution Trend Report** (${getCurrentTimeFormatted()})
+
+${allComparisons.join(separator)}
 
 ⏰ **New Day Reset In:** ${timeUntilReset}`;
+}
+
+function getGameByChannelId(channelId) {
+  for (const [game, id] of Object.entries(CHANNELS)) {
+    if (String(id) === String(channelId)) {
+      return game;
+    }
+  }
+  return null;
 }
 
 async function startBot() {
@@ -271,7 +364,11 @@ async function startBot() {
 
   client.on('ready', async () => {
     console.log(`✅ Bot logged in as ${client.user.tag}`);
-    console.log(`📝 Monitoring channel: ${LOGS_CHANNEL_ID || 'Not set'}`);
+    console.log(`📝 Monitoring channels:`);
+    console.log(`   - 99 Nights: ${CHANNELS['99nights'] || 'Not set'}`);
+    console.log(`   - iNK GAMES: ${CHANNELS['inkgames']}`);
+    console.log(`   - Steala: ${CHANNELS['steala']}`);
+    console.log(`   - Forsaken: ${CHANNELS['forsaken']}`);
     console.log(`📊 Stats output channel: ${STATS_CHANNEL_ID || 'Not set'}`);
     console.log(`📈 Comparison output channel: ${COMPARISON_CHANNEL_ID}`);
     console.log(`🕒 Current time: ${getCurrentTimeFormatted()}`);
@@ -282,16 +379,19 @@ async function startBot() {
     lastDayIndex = Math.floor(now / ONE_DAY);
 
     cleanOldStats();
-    previousStats.hour = {
-      executions: stats.hour.executions.length,
-      users: stats.hour.users.size,
-      timestamp: now
-    };
-    previousStats.day = {
-      executions: stats.day.executions.length,
-      users: stats.day.users.size,
-      timestamp: now
-    };
+    
+    for (const game in stats) {
+      previousStats[game].hour = {
+        executions: stats[game].hour.executions.length,
+        users: stats[game].hour.users.size,
+        timestamp: now
+      };
+      previousStats[game].day = {
+        executions: stats[game].day.executions.length,
+        users: stats[game].day.users.size,
+        timestamp: now
+      };
+    }
   });
 
   client.on('messageCreate', async (message) => {
@@ -306,7 +406,9 @@ async function startBot() {
       return;
     }
 
-    if (LOGS_CHANNEL_ID && String(message.channel.id) === String(LOGS_CHANNEL_ID)) {
+    const game = getGameByChannelId(message.channel.id);
+    
+    if (game) {
       let username = null;
 
       if (message.mentions && message.mentions.users.size > 0) {
@@ -332,14 +434,14 @@ async function startBot() {
       }
 
       if (username) {
-        trackExecution(username);
-        console.log(`✅ [${getCurrentTimeFormatted()}] Tracked execution by: ${username}`);
+        trackExecution(username, game);
+        console.log(`✅ [${getCurrentTimeFormatted()}] [${getGameName(game)}] Tracked execution by: ${username}`);
 
         if (DEBUG_NOTIFY && STATS_CHANNEL_ID) {
           try {
             const channel = await client.channels.fetch(STATS_CHANNEL_ID);
             if (channel && channel.isTextBased()) {
-              await channel.send(`🔔 (DEBUG) Tracked execution by: ${username}`);
+              await channel.send(`🔔 (DEBUG) [${getGameName(game)}] Tracked execution by: ${username}`);
             }
           } catch (err) {
             console.error('Failed to send DEBUG_NOTIFY message:', err?.message || err);
@@ -354,7 +456,15 @@ async function startBot() {
     try {
       cleanOldStats();
 
-      if (STATS_CHANNEL_ID && stats.minute.executions.length > 0) {
+      let hasExecutions = false;
+      for (const game in stats) {
+        if (stats[game].minute.executions.length > 0) {
+          hasExecutions = true;
+          break;
+        }
+      }
+
+      if (STATS_CHANNEL_ID && hasExecutions) {
         try {
           const channel = await client.channels.fetch(STATS_CHANNEL_ID);
           if (channel && channel.isTextBased()) {
@@ -382,14 +492,16 @@ async function startBot() {
             console.error('Failed to send hourly comparison message:', err?.message || err);
           }
 
-          previousStats.hour = {
-            executions: stats.hour.executions.length,
-            users: stats.hour.users.size,
-            timestamp: now
-          };
+          for (const game in stats) {
+            previousStats[game].hour = {
+              executions: stats[game].hour.executions.length,
+              users: stats[game].hour.users.size,
+              timestamp: now
+            };
 
-          stats.hour.executions = [];
-          stats.hour.users = new Set();
+            stats[game].hour.executions = [];
+            stats[game].hour.users = new Set();
+          }
         }
 
         if (currentDayIndex > lastDayIndex) {
@@ -406,14 +518,16 @@ async function startBot() {
             console.error('Failed to send daily comparison message:', err?.message || err);
           }
 
-          previousStats.day = {
-            executions: stats.day.executions.length,
-            users: stats.day.users.size,
-            timestamp: now
-          };
+          for (const game in stats) {
+            previousStats[game].day = {
+              executions: stats[game].day.executions.length,
+              users: stats[game].day.users.size,
+              timestamp: now
+            };
 
-          stats.day.executions = [];
-          stats.day.users = new Set();
+            stats[game].day.executions = [];
+            stats[game].day.users = new Set();
+          }
         }
       }
     } catch (error) {
