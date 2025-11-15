@@ -270,7 +270,7 @@ function getSingleGameStats(game) {
 function getStatsMessage() {
   cleanOldStats();
   
-  const separator = '\n\n\n\n\n';
+  const separator = '\n\n\n';
   
   const allStats = [
     getSingleGameStats('99nights'),
@@ -318,7 +318,7 @@ ${dayUsersMessage}`;
 }
 
 function getComparisonMessage() {
-  const separator = '\n\n\n\n\n';
+  const separator = '\n\n\n';
   
   const allComparisons = [
     getSingleGameComparison('99nights'),
