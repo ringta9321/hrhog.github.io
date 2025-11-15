@@ -257,17 +257,15 @@ function getSingleGameStats(game) {
 **Last Minute:**
 • Executions: ${stats[game].minute.executions.length}
 • Unique Users: ${stats[game].minute.users.size}
-
 **Last Hour:**
 • Executions: ${stats[game].hour.executions.length}
 • Unique Users: ${stats[game].hour.users.size}
-
 **Last 24 Hours:**
 • Executions: ${stats[game].day.executions.length}
 • Unique Users: ${stats[game].day.users.size}`;
 }
 
-function getStatsMessage() {
+function getStatsMessage(isNewHour = false) {
   cleanOldStats();
   
   const separator = '\n\n\n';
@@ -279,7 +277,9 @@ function getStatsMessage() {
     getSingleGameStats('forsaken')
   ];
   
-  return `**📊 ALL GAMES - Execution Statistics** (${getCurrentTimeFormatted()})
+  const newHourBanner = isNewHour ? '🕐 **NEW HOUR!** 🕐\n\n' : '';
+  
+  return `${newHourBanner}**📊 ALL GAMES - Execution Statistics** (${getCurrentTimeFormatted()})
 
 ${allStats.join(separator)}`;
 }
@@ -311,7 +311,6 @@ function getSingleGameComparison(game) {
 **Hourly Comparison:**
 ${hourExecMessage}
 ${hourUsersMessage}
-
 **Daily Comparison:**
 ${dayExecMessage}
 ${dayUsersMessage}`;
@@ -456,6 +455,10 @@ async function startBot() {
     try {
       cleanOldStats();
 
+      const currentHourIndex = Math.floor(now / ONE_HOUR);
+      const currentDayIndex = Math.floor(now / ONE_DAY);
+      const isNewHour = currentHourIndex > lastHourIndex;
+
       let hasExecutions = false;
       for (const game in stats) {
         if (stats[game].minute.executions.length > 0) {
@@ -468,7 +471,7 @@ async function startBot() {
         try {
           const channel = await client.channels.fetch(STATS_CHANNEL_ID);
           if (channel && channel.isTextBased()) {
-            await channel.send(getStatsMessage());
+            await channel.send(getStatsMessage(isNewHour));
           }
         } catch (err) {
           console.error('Failed to send stats message:', err?.message || err);
@@ -476,8 +479,6 @@ async function startBot() {
       }
 
       if (COMPARISON_CHANNEL_ID) {
-        const currentHourIndex = Math.floor(now / ONE_HOUR);
-        const currentDayIndex = Math.floor(now / ONE_DAY);
 
         if (currentHourIndex > lastHourIndex) {
           lastHourIndex = currentHourIndex;
@@ -487,9 +488,11 @@ async function startBot() {
             if (channel && channel.isTextBased()) {
               const comparisonMessage = getComparisonMessage();
               await channel.send(comparisonMessage);
+              console.log(`✅ [${getCurrentTimeFormatted()}] Sent hourly comparison to channel ${COMPARISON_CHANNEL_ID}`);
             }
           } catch (err) {
             console.error('Failed to send hourly comparison message:', err?.message || err);
+            console.error('Channel ID:', COMPARISON_CHANNEL_ID);
           }
 
           for (const game in stats) {
@@ -513,9 +516,11 @@ async function startBot() {
               const header = `🌅 **New Day Started!** (${getCurrentTimeFormatted()})`;
               const comparisonMessage = getComparisonMessage();
               await channel.send(`${header}\n\n${comparisonMessage}`);
+              console.log(`✅ [${getCurrentTimeFormatted()}] Sent daily comparison to channel ${COMPARISON_CHANNEL_ID}`);
             }
           } catch (err) {
             console.error('Failed to send daily comparison message:', err?.message || err);
+            console.error('Channel ID:', COMPARISON_CHANNEL_ID);
           }
 
           for (const game in stats) {
