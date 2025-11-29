@@ -1,5 +1,4 @@
 import { Client, GatewayIntentBits } from 'discord.js';
-
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN || '';
 const STATS_CHANNEL_ID = '1429696356859248740';
 const COMPARISON_CHANNEL_ID = '1429967291906265230';
