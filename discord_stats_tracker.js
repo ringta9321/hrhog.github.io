@@ -555,7 +555,7 @@ async function startBot() {
   try {
     await client.login(DISCORD_TOKEN);
   } catch (err) {
-    console.error('Bot failed to login:', err);
+    console.error('Bot failed to logi:', err);
   }
 }
 
