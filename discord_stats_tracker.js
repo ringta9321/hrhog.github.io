@@ -8,7 +8,8 @@ const CHANNELS = {
   '99nights': process.env.LOGS_CHANNEL_ID || '',
   'inkgames': '1393631891147718756',
   'steala': '1400585444001054730',
-  'forsaken': '1396894093900120105'
+  'forsaken': '1396894093900120105',
+  'deadrails': '1387492823141585006' // Added dead rails
 };
 
 const stats = {
@@ -31,6 +32,11 @@ const stats = {
     minute: { executions: [], users: new Set() },
     hour: { executions: [], users: new Set() },
     day: { executions: [], users: new Set() }
+  },
+  'deadrails': { // Added dead rails
+    minute: { executions: [], users: new Set() },
+    hour: { executions: [], users: new Set() },
+    day: { executions: [], users: new Set() }
   }
 };
 
@@ -48,6 +54,10 @@ const previousStats = {
     day: { executions: 0, users: 0, timestamp: 0 }
   },
   'forsaken': {
+    hour: { executions: 0, users: 0, timestamp: 0 },
+    day: { executions: 0, users: 0, timestamp: 0 }
+  },
+  'deadrails': { // Added dead rails
     hour: { executions: 0, users: 0, timestamp: 0 },
     day: { executions: 0, users: 0, timestamp: 0 }
   }
@@ -255,7 +265,8 @@ function getGameName(game) {
     '99nights': '99 Nights',
     'inkgames': 'iNK GAMES',
     'steala': 'Steala',
-    'forsaken': 'Forsaken'
+    'forsaken': 'Forsaken',
+    'deadrails': 'Dead Rails' // Added dead rails
   };
   return names[game] || game;
 }
@@ -286,7 +297,8 @@ function getStatsMessage() {
     getSingleGameStats('99nights'),
     getSingleGameStats('inkgames'),
     getSingleGameStats('steala'),
-    getSingleGameStats('forsaken')
+    getSingleGameStats('forsaken'),
+    getSingleGameStats('deadrails') // Dead Rails included
   ];
   
   const timeUntilNextHour = getTimeUntilNextHour();
@@ -336,7 +348,8 @@ function getComparisonMessage() {
     getSingleGameComparison('99nights'),
     getSingleGameComparison('inkgames'),
     getSingleGameComparison('steala'),
-    getSingleGameComparison('forsaken')
+    getSingleGameComparison('forsaken'),
+    getSingleGameComparison('deadrails') // Dead Rails included
   ];
   
   const timeUntilReset = getTimeUntilNextDayReset();
@@ -381,6 +394,7 @@ async function startBot() {
     console.log(`   - iNK GAMES: ${CHANNELS['inkgames']}`);
     console.log(`   - Steala: ${CHANNELS['steala']}`);
     console.log(`   - Forsaken: ${CHANNELS['forsaken']}`);
+    console.log(`   - Dead Rails: ${CHANNELS['deadrails']}`);
     console.log(`📊 Stats output channel: ${STATS_CHANNEL_ID || 'Not set'}`);
     console.log(`📈 Comparison output channel: ${COMPARISON_CHANNEL_ID}`);
     console.log(`🕒 Current time: ${getCurrentTimeFormatted()}`);
