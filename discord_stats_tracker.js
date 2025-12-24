@@ -1,4 +1,5 @@
 import { Client, GatewayIntentBits } from 'discord.js';
+
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN || '';
 const STATS_CHANNEL_ID = '1429696356859248740';
 const COMPARISON_CHANNEL_ID = '1429967291906265230';
@@ -346,6 +347,7 @@ async function startBot() {
   });
   let lastHourIndex = 0;
   let lastDayIndex = 0;
+
   client.on('ready', async () => {
     console.log(`✅ Bot logged in as ${client.user.tag}`);
     console.log(`📝 Monitoring channels:`);
@@ -358,6 +360,7 @@ async function startBot() {
     console.log(`📈 Comparison output channel: ${COMPARISON_CHANNEL_ID}`);
     console.log(`🕒 Current time: ${getCurrentTimeFormatted()}`);
     console.log('Bot is ready! Type !stats in any channel to see statistics.');
+
     const now = Date.now();
     lastHourIndex = Math.floor(now / ONE_HOUR);
     lastDayIndex = Math.floor(now / ONE_DAY);
@@ -375,6 +378,7 @@ async function startBot() {
       };
     }
   });
+
   client.on('messageCreate', async (message) => {
     if (message.author?.bot && !message.webhookId) return;
     if (message.content === '!stats') {
@@ -408,18 +412,10 @@ async function startBot() {
         }
       }
       if (username) {
+        // ONLY TRACK -- do NOT send or log per-execution to any channel
         trackExecution(username, game);
-        console.log(`✅ [${getCurrentTimeFormatted()}] [${getGameName(game)}] Tracked execution by: ${username}`);
-        if (game === 'deadrails') {
-          try {
-            const deadRailsChannel = await client.channels.fetch(CHANNELS['deadrails']);
-            if (deadRailsChannel && deadRailsChannel.isTextBased()) {
-              await deadRailsChannel.send(`🛤️ [${getCurrentTimeFormatted()}] Tracked execution by: ${username}`);
-            }
-          } catch (err) {
-            console.error('Failed to send Dead Rails track message:', err?.message || err);
-          }
-        }
+
+        // Only send debug notify (if enabled)
         if (DEBUG_NOTIFY && STATS_CHANNEL_ID) {
           try {
             const channel = await client.channels.fetch(STATS_CHANNEL_ID);
@@ -433,6 +429,7 @@ async function startBot() {
       }
     }
   });
+
   setInterval(async () => {
     const now = Date.now();
     try {
@@ -446,6 +443,7 @@ async function startBot() {
           break;
         }
       }
+      // Every minute: send stats if there was activity in last minute
       if (STATS_CHANNEL_ID && hasExecutions) {
         try {
           const channel = await client.channels.fetch(STATS_CHANNEL_ID);
@@ -456,6 +454,7 @@ async function startBot() {
           console.error('Failed to send stats message:', err?.message || err);
         }
       }
+      // Every hour or new day: send comparison and reset
       if (COMPARISON_CHANNEL_ID) {
         if (currentHourIndex > lastHourIndex) {
           lastHourIndex = currentHourIndex;
@@ -509,10 +508,11 @@ async function startBot() {
       console.error(`Error [${getCurrentTimeFormatted()}]:`, error?.message || error);
     }
   }, ONE_MINUTE);
+
   try {
     await client.login(DISCORD_TOKEN);
   } catch (err) {
-    console.error('Bot failed to logi:', err);
+    console.error('Bot failed to login:', err);
   }
 }
 
