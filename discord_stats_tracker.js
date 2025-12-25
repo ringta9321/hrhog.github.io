@@ -10,7 +10,8 @@ const CHANNELS = {
   'inkgames': '1393631891147718756',
   'steala': '1400585444001054730',
   'forsaken': '1396894093900120105',
-  'deadrails': '1387492823141585006'
+  'deadrails': '1387492823141585006',
+  'adoptme': '1453245039974027366'
 };
 
 const stats = {
@@ -38,6 +39,11 @@ const stats = {
     minute: { executions: [], users: new Set() },
     hour: { executions: [], users: new Set() },
     day: { executions: [], users: new Set() }
+  },
+  'adoptme': {
+    minute: { executions: [], users: new Set() },
+    hour: { executions: [], users: new Set() },
+    day: { executions: [], users: new Set() }
   }
 };
 
@@ -59,6 +65,10 @@ const previousStats = {
     day: { executions: 0, users: 0, timestamp: 0 }
   },
   'deadrails': {
+    hour: { executions: 0, users: 0, timestamp: 0 },
+    day: { executions: 0, users: 0, timestamp: 0 }
+  },
+  'adoptme': {
     hour: { executions: 0, users: 0, timestamp: 0 },
     day: { executions: 0, users: 0, timestamp: 0 }
   }
@@ -241,7 +251,8 @@ function getGameName(game) {
     'inkgames': 'iNK GAMES',
     'steala': 'Steala',
     'forsaken': 'Forsaken',
-    'deadrails': 'Dead Rails'
+    'deadrails': 'Dead Rails',
+    'adoptme': 'Adopt Me'
   };
   return names[game] || game;
 }
@@ -270,7 +281,8 @@ function getStatsMessage() {
     getSingleGameStats('inkgames'),
     getSingleGameStats('steala'),
     getSingleGameStats('forsaken'),
-    getSingleGameStats('deadrails')
+    getSingleGameStats('deadrails'),
+    getSingleGameStats('adoptme')
   ];
   const timeUntilNextHour = getTimeUntilNextHour();
   return `**📊 ALL GAMES - Execution Statistics** (${getCurrentTimeFormatted()})
@@ -314,7 +326,8 @@ function getComparisonMessage() {
     getSingleGameComparison('inkgames'),
     getSingleGameComparison('steala'),
     getSingleGameComparison('forsaken'),
-    getSingleGameComparison('deadrails')
+    getSingleGameComparison('deadrails'),
+    getSingleGameComparison('adoptme')
   ];
   const timeUntilReset = getTimeUntilNextDayReset();
   return `**📊 ALL GAMES - Execution Trend Report** (${getCurrentTimeFormatted()})
@@ -356,6 +369,7 @@ async function startBot() {
     console.log(`   - Steala: ${CHANNELS['steala']}`);
     console.log(`   - Forsaken: ${CHANNELS['forsaken']}`);
     console.log(`   - Dead Rails: ${CHANNELS['deadrails']}`);
+    console.log(`   - Adopt Me: ${CHANNELS['adoptme']}`);
     console.log(`📊 Stats output channel: ${STATS_CHANNEL_ID || 'Not set'}`);
     console.log(`📈 Comparison output channel: ${COMPARISON_CHANNEL_ID}`);
     console.log(`🕒 Current time: ${getCurrentTimeFormatted()}`);
@@ -412,10 +426,8 @@ async function startBot() {
         }
       }
       if (username) {
-        // ONLY TRACK -- do NOT send or log per-execution to any channel
         trackExecution(username, game);
 
-        // Only send debug notify (if enabled)
         if (DEBUG_NOTIFY && STATS_CHANNEL_ID) {
           try {
             const channel = await client.channels.fetch(STATS_CHANNEL_ID);
@@ -443,7 +455,6 @@ async function startBot() {
           break;
         }
       }
-      // Every minute: send stats if there was activity in last minute
       if (STATS_CHANNEL_ID && hasExecutions) {
         try {
           const channel = await client.channels.fetch(STATS_CHANNEL_ID);
@@ -454,7 +465,6 @@ async function startBot() {
           console.error('Failed to send stats message:', err?.message || err);
         }
       }
-      // Every hour or new day: send comparison and reset
       if (COMPARISON_CHANNEL_ID) {
         if (currentHourIndex > lastHourIndex) {
           lastHourIndex = currentHourIndex;
