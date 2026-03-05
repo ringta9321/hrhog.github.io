@@ -347,8 +347,9 @@ function getGameByChannelId(channelId) {
 }
 
 async function startBot() {
+  console.log('[DEBUG] startBot called. DISCORD_TOKEN exists?', !!DISCORD_TOKEN, 'Length:', DISCORD_TOKEN.length);
   if (!DISCORD_TOKEN) {
-    console.error('❌ DISCORD_TOKEN is not set!');
+    console.error('[ERROR] DISCORD_TOKEN is not set!');
     return;
   }
   const client = new Client({
@@ -360,7 +361,6 @@ async function startBot() {
   });
   let lastHourIndex = 0;
   let lastDayIndex = 0;
-
   client.on('ready', async () => {
     console.log(`✅ Bot logged in as ${client.user.tag}`);
     console.log(`📝 Monitoring channels:`);
@@ -374,7 +374,6 @@ async function startBot() {
     console.log(`📈 Comparison output channel: ${COMPARISON_CHANNEL_ID}`);
     console.log(`🕒 Current time: ${getCurrentTimeFormatted()}`);
     console.log('Bot is ready! Type !stats in any channel to see statistics.');
-
     const now = Date.now();
     lastHourIndex = Math.floor(now / ONE_HOUR);
     lastDayIndex = Math.floor(now / ONE_DAY);
@@ -392,7 +391,6 @@ async function startBot() {
       };
     }
   });
-
   client.on('messageCreate', async (message) => {
     if (message.author?.bot && !message.webhookId) return;
     if (message.content === '!stats') {
@@ -427,7 +425,6 @@ async function startBot() {
       }
       if (username) {
         trackExecution(username, game);
-
         if (DEBUG_NOTIFY && STATS_CHANNEL_ID) {
           try {
             const channel = await client.channels.fetch(STATS_CHANNEL_ID);
@@ -441,7 +438,6 @@ async function startBot() {
       }
     }
   });
-
   setInterval(async () => {
     const now = Date.now();
     try {
@@ -518,11 +514,11 @@ async function startBot() {
       console.error(`Error [${getCurrentTimeFormatted()}]:`, error?.message || error);
     }
   }, ONE_MINUTE);
-
   try {
     await client.login(DISCORD_TOKEN);
+    console.log('[DEBUG] Bot login succeeded!');
   } catch (err) {
-    console.error('Bot failed to logi:', err);
+    console.error('[ERROR] Bot failed to login:', err);
   }
 }
 
